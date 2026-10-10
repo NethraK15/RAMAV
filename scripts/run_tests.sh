@@ -2,6 +2,11 @@
 set -e
 cd "$(dirname "$0")/.."
 
+# Activate virtual environment if present
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+fi
+
 echo "== Rebuilding demo git repositories (tests run against them) =="
 python3 scripts/setup_demo_repos.py
 

@@ -20,8 +20,13 @@ const OUTCOME_LABEL = {
 
 function pct(x) { return `${Math.round((x || 0) * 100)}%`; }
 
-async function postJSON(path) {
-  const res = await fetch(API + path, { method: "POST" });
+async function postJSON(path, body) {
+  const options = { method: "POST" };
+  if (body) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = JSON.stringify(body);
+  }
+  const res = await fetch(API + path, options);
   return res.json();
 }
 async function getJSON(path) {
@@ -143,7 +148,9 @@ function OverviewPage({ run }) {
 }
 
 // ---------------------------------------------------------------------------
-function DemoPage({ onRun, loading, activeScenario }) {
+function DemoPage({ onRun, onRunCustom, loading, activeScenario }) {
+  const [customPath, setCustomPath] = useState("");
+  const [customPrId, setCustomPrId] = useState("PR-1");
   const scenarios = [
     ["safe", "SAFE PR", "/api/demo/safe"],
     ["sql_injection", "SQL INJECTION PR", "/api/demo/security"],
@@ -169,6 +176,26 @@ function DemoPage({ onRun, loading, activeScenario }) {
             ${loading === key ? "Running…" : label}
           </button>
         `)}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Analyze a real local Git repository</div>
+      <p class="dim" style=${{ maxWidth: "640px" }}>
+        Point RAMAV to ANY local git repository on your machine. All specialized agents, real tools (Semgrep, Pytest),
+        and the multi-agent investigation search will run live against the repository commits.
+      </p>
+      <div class="card" style=${{ maxWidth: "640px", marginTop: "12px" }}>
+        <div style=${{ marginBottom: "12px" }}>
+          <label class="dim" style=${{ display: "block", fontSize: "12px", marginBottom: "4px" }}>Local Repository Absolute Path</label>
+          <input class="text-input" placeholder="/Users/nethra/Desktop/Academics/FOAI/ramav" value=${customPath} onInput=${e => setCustomPath(e.target.value)} />
+        </div>
+        <div style=${{ marginBottom: "16px" }}>
+          <label class="dim" style=${{ display: "block", fontSize: "12px", marginBottom: "4px" }}>PR / Change Identifier</label>
+          <input class="text-input" placeholder="PR-101" value=${customPrId} onInput=${e => setCustomPrId(e.target.value)} />
+        </div>
+        <button class="btn btn-primary" disabled=${loading || !customPath.trim()} onClick=${() => onRunCustom(customPath.trim(), customPrId.trim())}>
+          ${loading === "custom" ? "Analyzing repository…" : "Analyze Repository"}
+        </button>
       </div>
     </div>
     <div class="section">
@@ -544,9 +571,27 @@ function App() {
     }
   }, []);
 
+  const runCustomRepo = useCallback(async (path, prId) => {
+    setLoading("custom");
+    try {
+      const data = await postJSON("/api/analyze/repository", { path, pr_id: prId || "local-pr" });
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+      setRun(data);
+      setActiveScenario("custom");
+      setTab("overview");
+    } catch (err) {
+      alert("Error analyzing repository: " + err);
+    } finally {
+      setLoading(null);
+    }
+  }, []);
+
   let page;
   if (tab === "overview") page = html`<${OverviewPage} run=${run} />`;
-  else if (tab === "demo") page = html`<${DemoPage} onRun=${runScenario} loading=${loading} activeScenario=${activeScenario} />`;
+  else if (tab === "demo") page = html`<${DemoPage} onRun=${runScenario} onRunCustom=${runCustomRepo} loading=${loading} activeScenario=${activeScenario} />`;
   else if (tab === "conversation") page = html`<${ConversationPage} run=${run} />`;
   else if (tab === "findings") page = html`<${FindingsPage} run=${run} />`;
   else if (tab === "decision") page = html`<${DecisionPage} run=${run} />`;

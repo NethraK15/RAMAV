@@ -142,6 +142,7 @@ def analyze_repository():
     orch = Orchestrator(path, pr_id)
     result = orch.run()
     result["scenario"] = "custom"
+    result["git"] = commit_range_summary(path)
     run_id = str(uuid.uuid4())
     result["run_id"] = run_id
     _RUN_CACHE[run_id] = result

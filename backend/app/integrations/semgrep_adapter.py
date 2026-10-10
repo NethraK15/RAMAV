@@ -13,9 +13,11 @@ truth about where the evidence came from.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 
 
@@ -30,7 +32,10 @@ class SemgrepFinding:
 
 
 def semgrep_available() -> bool:
-    return shutil.which("semgrep") is not None
+    if shutil.which("semgrep") is not None:
+        return True
+    venv_semgrep = os.path.join(os.path.dirname(sys.executable), "semgrep")
+    return os.path.isfile(venv_semgrep) and os.access(venv_semgrep, os.X_OK)
 
 
 def run_semgrep(target_dir: str, timeout: int = 60) -> tuple[list[SemgrepFinding], bool, str]:
@@ -39,18 +44,31 @@ def run_semgrep(target_dir: str, timeout: int = 60) -> tuple[list[SemgrepFinding
     """
     if semgrep_available():
         try:
+            semgrep_bin = shutil.which("semgrep") or os.path.join(os.path.dirname(sys.executable), "semgrep")
             proc = subprocess.run(
-                ["semgrep", "scan", "--config", "auto", "--json", "--quiet", target_dir],
+                [semgrep_bin, "scan", "--config", "auto", "--json", "--quiet", target_dir],
                 capture_output=True, text=True, timeout=timeout,
             )
             data = json.loads(proc.stdout or "{}")
             findings = []
+            abs_target = os.path.abspath(target_dir)
             for r in data.get("results", []):
+                raw_path = r.get("path", "")
+                if os.path.isabs(raw_path):
+                    abs_path = raw_path
+                elif os.path.exists(raw_path):
+                    abs_path = os.path.abspath(raw_path)
+                else:
+                    abs_path = os.path.abspath(os.path.join(target_dir, raw_path))
+                try:
+                    rel_file = os.path.relpath(abs_path, abs_target)
+                except ValueError:
+                    rel_file = raw_path
                 findings.append(SemgrepFinding(
                     rule_id=r.get("check_id", "unknown"),
                     message=r.get("extra", {}).get("message", ""),
                     severity=r.get("extra", {}).get("severity", "WARNING"),
-                    file=r.get("path", ""),
+                    file=rel_file,
                     line=(r.get("start", {}) or {}).get("line", 0),
                     metadata=r.get("extra", {}).get("metadata", {}),
                 ))
