@@ -203,6 +203,9 @@ def post_to_github(comment_body: str, repo: str, pr_number: str, token: str) -> 
         return True
     else:
         print(f"Failed to post comment to GitHub: {post_res.status_code} {post_res.text}")
+        if post_res.status_code == 403:
+            print("\n💡 HINT: To enable posting PR comments automatically, go to:")
+            print("   Settings -> Actions -> General -> Workflow permissions -> Select 'Read and write permissions'\n")
         return False
 
 
@@ -225,15 +228,23 @@ def main():
 
     comment_markdown, outcome = format_pr_comment(result, pr_number, repo_path)
 
-    if args.dry_run or not args.github_token:
-        print("\n" + "=" * 30 + " RAMAV PR COMMENT PREVIEW " + "=" * 30)
-        print(comment_markdown)
-        print("=" * 86 + "\n")
-    else:
-        if not args.github_repo:
-            print("Error: GITHUB_REPOSITORY environment variable or --github-repo argument required.")
-            sys.exit(1)
-        post_to_github(comment_markdown, args.github_repo, pr_number, args.github_token)
+    # Always write to GitHub Action Job Summary if running in CI
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if step_summary:
+        try:
+            with open(step_summary, "a") as fh:
+                fh.write("\n" + comment_markdown + "\n")
+        except Exception:
+            pass
+
+    # Always output formatted report to the action logs
+    print("\n" + "=" * 30 + " RAMAV PR VALIDATION REPORT " + "=" * 30)
+    print(comment_markdown)
+    print("=" * 86 + "\n")
+
+    if not args.dry_run and args.github_token:
+        if args.github_repo:
+            post_to_github(comment_markdown, args.github_repo, pr_number, args.github_token)
 
     if args.fail_on_reject and outcome == "AUTO_REJECT":
         print(f"\n[RAMAV Check Result: FAILED] Outcome was {outcome}. Blocking PR merge.")
