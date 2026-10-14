@@ -22,8 +22,18 @@ def is_git_repo(path: str) -> bool:
 
 
 def diff_against_parent(path: str) -> list[str]:
-    """Returns the list of files changed in HEAD relative to HEAD~1.
+    """Returns the list of files changed in HEAD relative to origin/main or HEAD~1.
     Falls back to listing every tracked file if there is only one commit."""
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "--name-only", "origin/main...HEAD"],
+            cwd=path, capture_output=True, text=True, check=True,
+        )
+        files = [f for f in proc.stdout.splitlines() if f.strip()]
+        if files:
+            return files
+    except Exception:
+        pass
     try:
         proc = subprocess.run(
             ["git", "diff", "--name-only", "HEAD~1..HEAD"],
